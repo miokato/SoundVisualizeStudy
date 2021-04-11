@@ -21,11 +21,34 @@ vertex ColorInOut soundVertexShader(const device float4 *positions [[ buffer(0) 
     return out;
 }
 
+float3 rgb2hsb(float3 c ){
+    float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    float4 p = mix(float4(c.bg, K.wz),
+                 float4(c.gb, K.xy),
+                 step(c.b, c.g));
+    float4 q = mix(float4(p.xyw, c.r),
+                 float4(c.r, p.yzx),
+                 step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)),
+                d / (q.x + e),
+                q.x);
+}
+
+//  Function from Iñigo Quiles
+//  https://www.shadertoy.com/view/MsS3Wc
+float3 hsb2rgb(float3 c ){
+    float3 rgb = clamp(abs(fmod(c.x*6.0+float3(0.0,4.0,2.0),
+                               6.0)-3.0)-1.0,
+                       0.0,
+                       1.0 );
+    rgb = rgb*rgb*(3.0-2.0*rgb);
+    return c.z * mix(float3(1.0), rgb, c.y);
+}
+
 constant float sampleNum = 85; // 128だが、80まで使う。
-constant float3 colorA = float3(0.149,0.341,0.912);
-constant float3 colorB = float3(1.000,0.221,0.124);
-constant float3 colorC = float3(0.210,0.981,0.124);
-constant float3 whiteColor = float3(1.0, 1.0, 1.0);
+
 fragment float4 soundFragmentShader(ColorInOut in [[ stage_in ]],
                                constant float *values [[ buffer(0) ]],
                                constant float &index [[ buffer(1) ]],
@@ -42,10 +65,9 @@ fragment float4 soundFragmentShader(ColorInOut in [[ stage_in ]],
     // step(edge, value)なので、uv.xは0~1をとるため、x方向にvalueで分割する。
     float3 result = step(uv.x, 1/sampleNum);
 
-    // 棒に色を加える
-    result += colorA * uv.x;
-    result += colorB * (1.0-uv.x);
-    result += colorC * abs((0.5-uv.x));
+    // 棒に色を加える HSV色空間で色相をオレンジから水色にグラデーションさせる
+    result += hsb2rgb(float3((1.0-(uv.x+0.1)*0.5), 0.6, 1.0));
+
     // y方向にどこまで描画するかは、座標毎に値による。
     result += step((1.0 - uv.y) * values[position], 0.01);
     
